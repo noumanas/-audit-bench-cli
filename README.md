@@ -101,23 +101,32 @@ docker run --rm -v "$(pwd)":/workspace -e AUDITBENCH_API_KEY="$AUDITBENCH_API_KE
 
 ### Publishing the image to Google Artifact Registry
 
-One-time setup (per GCP project):
+**Don't use Cloud Run's "continuously deploy from source" for this repo.** That flow assumes
+a long-running HTTP service; this image runs one command and exits, so Cloud Run will treat
+that as a crashed container. It also derives its image tag from this repo's name — which
+starts with a hyphen (`-audit-bench-cli`), an invalid Docker image path component, so the
+build fails before it even gets that far.
+
+Use the included `cloudbuild.yaml` instead (GCP Console → Cloud Build → Triggers → point a
+trigger at this repo with type **"Cloud Build configuration file"**, not **"Cloud Run"**). It
+only builds and pushes to Artifact Registry — no deploy step, which is the correct shape for
+a CLI. One-time setup (per GCP project):
 
 ```
 gcloud artifacts repositories create auditbench-cli \
   --repository-format=docker \
-  --location=us-central1 \
+  --location=europe-west1 \
   --description="audit/bench CLI image"
 
-gcloud auth configure-docker us-central1-docker.pkg.dev
+gcloud auth configure-docker europe-west1-docker.pkg.dev
 ```
 
 Build, tag, and push:
 
 ```
 export PROJECT_ID=$(gcloud config get-value project)
-docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/auditbench-cli/auditbench-cli:latest .
-docker push us-central1-docker.pkg.dev/$PROJECT_ID/auditbench-cli/auditbench-cli:latest
+docker build -t europe-west1-docker.pkg.dev/$PROJECT_ID/auditbench-cli/auditbench-cli:latest .
+docker push europe-west1-docker.pkg.dev/$PROJECT_ID/auditbench-cli/auditbench-cli:latest
 ```
 
 From then on, any pipeline (Cloud Build, GitHub Actions, GitLab CI, a GKE job, etc.) can pull
@@ -125,7 +134,7 @@ and run it directly:
 
 ```
 docker run --rm -v "$(pwd)":/workspace -e AUDITBENCH_API_KEY="$AUDITBENCH_API_KEY" \
-  us-central1-docker.pkg.dev/$PROJECT_ID/auditbench-cli/auditbench-cli:latest \
+  europe-west1-docker.pkg.dev/$PROJECT_ID/auditbench-cli/auditbench-cli:latest \
   scan . --fail-on do_not_ship
 ```
 

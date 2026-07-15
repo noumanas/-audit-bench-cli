@@ -1,0 +1,23 @@
+# Build + publish only — this CLI has no HTTP server to run, so it must
+# NOT go through Cloud Run's "continuously deploy from source" (that flow
+# assumes a long-running service and will fail health checks the moment the
+# container exits after running one command). This trigger just builds the
+# Docker image and pushes it to Artifact Registry; consumers `docker run`
+# it on demand (see README.md).
+#
+# The image path is spelled out explicitly rather than left to Cloud Run's
+# auto-derived tag, which broke on this repo's leading-hyphen name
+# (Docker image path components can't start with "-").
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'europe-west1-docker.pkg.dev/$PROJECT_ID/auditbench-cli/auditbench-cli:$COMMIT_SHA'
+      - '-t'
+      - 'europe-west1-docker.pkg.dev/$PROJECT_ID/auditbench-cli/auditbench-cli:latest'
+      - '.'
+
+images:
+  - 'europe-west1-docker.pkg.dev/$PROJECT_ID/auditbench-cli/auditbench-cli:$COMMIT_SHA'
+  - 'europe-west1-docker.pkg.dev/$PROJECT_ID/auditbench-cli/auditbench-cli:latest'
