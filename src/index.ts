@@ -25,12 +25,20 @@ program
   .command('audit <file>')
   .description('Run a single-file audit')
   .option('--provider <provider>', 'LLM provider: anthropic | openai | gemini')
+  .option(
+    '--fail-on <level>',
+    'exit non-zero when the verdict is at least this bad: do_not_ship (default) | needs_work | never',
+  )
   .action(auditCommand);
 
 program
   .command('scan <path>')
   .description('Scan a directory or .zip archive as a repository')
   .option('--provider <provider>', 'LLM provider: anthropic | openai | gemini')
+  .option(
+    '--fail-on <level>',
+    'exit non-zero when the verdict is at least this bad: do_not_ship (default) | needs_work | never',
+  )
   .action(scanCommand);
 
 program.parseAsync(process.argv);

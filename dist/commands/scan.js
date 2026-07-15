@@ -7,6 +7,7 @@ const api_1 = require("../api");
 const config_1 = require("../config");
 const zip_directory_1 = require("../zip-directory");
 const colors_1 = require("../colors");
+const verdict_gate_1 = require("../verdict-gate");
 const POLL_INTERVAL_MS = 2000;
 const POLL_TIMEOUT_MS = 5 * 60 * 1000;
 function sleep(ms) {
@@ -28,6 +29,7 @@ async function waitForCompletion(client, jobId) {
 async function scanCommand(path, opts) {
     const config = (0, config_1.loadConfig)();
     const token = (0, config_1.requireToken)(config);
+    const failOn = (0, verdict_gate_1.parseFailOn)(opts.failOn);
     if (!(0, fs_1.existsSync)(path)) {
         console.error(`Path not found: ${path}`);
         process.exitCode = 1;
@@ -61,13 +63,19 @@ async function scanCommand(path, opts) {
         const filesWithFindings = (finished.files || []).filter((f) => f.findings.length > 0);
         if (filesWithFindings.length === 0) {
             console.log(colors_1.color.green('No findings across scanned files.'));
-            return;
         }
-        for (const f of filesWithFindings) {
-            console.log(`${f.verdict ? (0, colors_1.verdictColor)(f.verdict) : ''} ${colors_1.color.bold(f.path)}`);
-            for (const finding of f.findings) {
-                console.log(`  ${(0, colors_1.severityColor)(finding.severity)} [${finding.category}] ${finding.title}`);
+        else {
+            for (const f of filesWithFindings) {
+                console.log(`${f.verdict ? (0, colors_1.verdictColor)(f.verdict) : ''} ${colors_1.color.bold(f.path)}`);
+                for (const finding of f.findings) {
+                    console.log(`  ${(0, colors_1.severityColor)(finding.severity)} [${finding.category}] ${finding.title}`);
+                }
             }
+        }
+        if ((0, verdict_gate_1.shouldFailBuild)(finished.verdict, failOn)) {
+            console.log('');
+            console.error(colors_1.color.red(`Failing build — verdict "${finished.verdict}" meets --fail-on ${failOn}.`));
+            process.exitCode = 1;
         }
     }
     catch (err) {

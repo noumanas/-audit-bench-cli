@@ -6,9 +6,11 @@ const path_1 = require("path");
 const api_1 = require("../api");
 const config_1 = require("../config");
 const colors_1 = require("../colors");
+const verdict_gate_1 = require("../verdict-gate");
 async function auditCommand(file, opts) {
     const config = (0, config_1.loadConfig)();
     const token = (0, config_1.requireToken)(config);
+    const failOn = (0, verdict_gate_1.parseFailOn)(opts.failOn);
     if (!(0, fs_1.existsSync)(file)) {
         console.error(`File not found: ${file}`);
         process.exitCode = 1;
@@ -25,15 +27,21 @@ async function auditCommand(file, opts) {
         console.log('');
         if (audit.findings.length === 0) {
             console.log(colors_1.color.green('No findings.'));
-            return;
         }
-        for (const f of audit.findings) {
-            console.log(`${(0, colors_1.severityColor)(f.severity)} [${f.category}] ${colors_1.color.bold(f.title)}${f.line ? ` (line ${f.line})` : ''}`);
-            console.log(`  ${f.description}`);
-            console.log(`  ${colors_1.color.gray('Fix:')} ${f.suggestedFix}`);
+        else {
+            for (const f of audit.findings) {
+                console.log(`${(0, colors_1.severityColor)(f.severity)} [${f.category}] ${colors_1.color.bold(f.title)}${f.line ? ` (line ${f.line})` : ''}`);
+                console.log(`  ${f.description}`);
+                console.log(`  ${colors_1.color.gray('Fix:')} ${f.suggestedFix}`);
+                console.log('');
+            }
+            console.log(colors_1.color.gray(`${audit.findings.length} finding(s) · ${audit.fromCache ? 'served from cache' : audit.aiInvoked ? 'AI reviewed' : 'local checks only'}`));
+        }
+        if ((0, verdict_gate_1.shouldFailBuild)(audit.verdict, failOn)) {
             console.log('');
+            console.error(colors_1.color.red(`Failing build — verdict "${audit.verdict}" meets --fail-on ${failOn}.`));
+            process.exitCode = 1;
         }
-        console.log(colors_1.color.gray(`${audit.findings.length} finding(s) · ${audit.fromCache ? 'served from cache' : audit.aiInvoked ? 'AI reviewed' : 'local checks only'}`));
     }
     catch (err) {
         if (err instanceof api_1.ApiError && (err.status === 429 || err.status === 403)) {

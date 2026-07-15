@@ -3,10 +3,12 @@ import { basename } from 'path';
 import { ApiClient, ApiError } from '../api';
 import { loadConfig, requireToken } from '../config';
 import { color, severityColor, verdictColor } from '../colors';
+import { parseFailOn, shouldFailBuild } from '../verdict-gate';
 
-export async function auditCommand(file: string, opts: { provider?: string }): Promise<void> {
+export async function auditCommand(file: string, opts: { provider?: string; failOn?: string }): Promise<void> {
   const config = loadConfig();
   const token = requireToken(config);
+  const failOn = parseFailOn(opts.failOn);
 
   if (!existsSync(file)) {
     console.error(`File not found: ${file}`);
@@ -28,17 +30,21 @@ export async function auditCommand(file: string, opts: { provider?: string }): P
 
     if (audit.findings.length === 0) {
       console.log(color.green('No findings.'));
-      return;
+    } else {
+      for (const f of audit.findings) {
+        console.log(`${severityColor(f.severity)} [${f.category}] ${color.bold(f.title)}${f.line ? ` (line ${f.line})` : ''}`);
+        console.log(`  ${f.description}`);
+        console.log(`  ${color.gray('Fix:')} ${f.suggestedFix}`);
+        console.log('');
+      }
+      console.log(color.gray(`${audit.findings.length} finding(s) · ${audit.fromCache ? 'served from cache' : audit.aiInvoked ? 'AI reviewed' : 'local checks only'}`));
     }
 
-    for (const f of audit.findings) {
-      console.log(`${severityColor(f.severity)} [${f.category}] ${color.bold(f.title)}${f.line ? ` (line ${f.line})` : ''}`);
-      console.log(`  ${f.description}`);
-      console.log(`  ${color.gray('Fix:')} ${f.suggestedFix}`);
+    if (shouldFailBuild(audit.verdict, failOn)) {
       console.log('');
+      console.error(color.red(`Failing build — verdict "${audit.verdict}" meets --fail-on ${failOn}.`));
+      process.exitCode = 1;
     }
-
-    console.log(color.gray(`${audit.findings.length} finding(s) · ${audit.fromCache ? 'served from cache' : audit.aiInvoked ? 'AI reviewed' : 'local checks only'}`));
   } catch (err) {
     if (err instanceof ApiError && (err.status === 429 || err.status === 403)) {
       console.error(`Audit blocked: ${err.message}`);

@@ -45,9 +45,22 @@ export function clearConfig(): void {
   if (existsSync(CONFIG_FILE)) unlinkSync(CONFIG_FILE);
 }
 
+/**
+ * AUDITBENCH_API_KEY takes priority over a stored login token — this is
+ * the CI-friendly path: set the env var from a secret and skip
+ * `auditbench login` (and its interactive password prompt) entirely. Works
+ * transparently because the backend accepts an API key on the same
+ * `Authorization: Bearer` header as a real login token (see JwtAuthGuard).
+ */
 export function requireToken(config: CliConfig): string {
+  const apiKey = process.env.AUDITBENCH_API_KEY;
+  if (apiKey) return apiKey;
+
   if (!config.token) {
-    console.error("Not logged in. Run `auditbench login` first.");
+    console.error(
+      "Not authenticated. Run `auditbench login`, or set AUDITBENCH_API_KEY " +
+        "(find yours under Repository scan → CLI / CI-CD API key in the dashboard).",
+    );
     process.exit(1);
   }
   return config.token;

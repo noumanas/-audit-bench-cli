@@ -4,6 +4,7 @@ import { ApiClient, ApiError, ScanJob } from '../api';
 import { loadConfig, requireToken } from '../config';
 import { zipDirectory } from '../zip-directory';
 import { color, severityColor, verdictColor } from '../colors';
+import { parseFailOn, shouldFailBuild } from '../verdict-gate';
 
 const POLL_INTERVAL_MS = 2000;
 const POLL_TIMEOUT_MS = 5 * 60 * 1000;
@@ -26,9 +27,10 @@ async function waitForCompletion(client: ApiClient, jobId: string): Promise<Scan
   throw new Error('Timed out waiting for scan to complete.');
 }
 
-export async function scanCommand(path: string, opts: { provider?: string }): Promise<void> {
+export async function scanCommand(path: string, opts: { provider?: string; failOn?: string }): Promise<void> {
   const config = loadConfig();
   const token = requireToken(config);
+  const failOn = parseFailOn(opts.failOn);
 
   if (!existsSync(path)) {
     console.error(`Path not found: ${path}`);
@@ -70,14 +72,19 @@ export async function scanCommand(path: string, opts: { provider?: string }): Pr
     const filesWithFindings = (finished.files || []).filter((f) => f.findings.length > 0);
     if (filesWithFindings.length === 0) {
       console.log(color.green('No findings across scanned files.'));
-      return;
+    } else {
+      for (const f of filesWithFindings) {
+        console.log(`${f.verdict ? verdictColor(f.verdict) : ''} ${color.bold(f.path)}`);
+        for (const finding of f.findings) {
+          console.log(`  ${severityColor(finding.severity)} [${finding.category}] ${finding.title}`);
+        }
+      }
     }
 
-    for (const f of filesWithFindings) {
-      console.log(`${f.verdict ? verdictColor(f.verdict) : ''} ${color.bold(f.path)}`);
-      for (const finding of f.findings) {
-        console.log(`  ${severityColor(finding.severity)} [${finding.category}] ${finding.title}`);
-      }
+    if (shouldFailBuild(finished.verdict, failOn)) {
+      console.log('');
+      console.error(color.red(`Failing build — verdict "${finished.verdict}" meets --fail-on ${failOn}.`));
+      process.exitCode = 1;
     }
   } catch (err) {
     if (err instanceof ApiError && (err.status === 429 || err.status === 403)) {
